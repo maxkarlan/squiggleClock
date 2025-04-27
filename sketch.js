@@ -27,6 +27,27 @@ let patternNoiseOffset = 0;
 let stripeAngle;
 // Add variable for gradient background
 let hasGradientBackground = false;
+// Add variables for number size transitions
+let hourTargetSize = 150;
+let minuteTargetSize = 75;
+let secondTargetSize = 50;
+let currentHourSize = 150;
+let currentMinuteSize = 75;
+let currentSecondSize = 50;
+// Add variables for radial mode number sizes
+let radialHourTargetSize = 150;
+let radialMinuteTargetSize = 75;
+let radialSecondTargetSize = 50;
+let currentRadialHourSize = 150;
+let currentRadialMinuteSize = 75;
+let currentRadialSecondSize = 50;
+// Add variables for number colors
+let hourFillColor = [255, 0, 0];
+let hourStrokeColor = [255, 0, 0];
+let minuteFillColor = [0, 255, 0];
+let minuteStrokeColor = [0, 255, 0];
+let secondFillColor = [0, 0, 255];
+let secondStrokeColor = [0, 0, 255];
 
 function drawBackground() {
     background(240); // Base background color
@@ -323,8 +344,103 @@ function draw() {
     
     // Draw in layers from bottom to top
     if (clockMode === 'radial') {
-        // First layer: Hour
+        // First layer: Hour hand with reduced opacity
+        drawSquiggle(hourSquiggle, color(255, 0, 0, 255), currentHour);
+        
+        // Second layer: Minute hand with reduced opacity
+        drawSquiggle(minuteSquiggle, color(0, 255, 0, 255), currentMinute);
+        
+        // Third layer: Second hand with reduced opacity
+        drawSquiggle(secondSquiggle, color(0, 0, 255, 255), currentSecond);
+
+        // Draw all non-selected numbers in black first
+        numbers.forEach(num => {
+            if (num.value !== currentHour && num.value !== currentMinute && num.value !== currentSecond) {
+                textAlign(CENTER, CENTER);
+                textSize(currentSizes[num.value]);
+                noStroke();
+                fill(0);
+                text(num.value, num.x, num.y);
+            }
+        });
+        
+        // Update target sizes for overlapping numbers in radial mode
+        let hourNum = numbers.find(n => n.value === currentHour);
+        let minuteNum = numbers.find(n => n.value === currentMinute);
+        let secondNum = numbers.find(n => n.value === currentSecond);
+        
+        // Reset target sizes
+        hourTargetSize = 150;
+        minuteTargetSize = 75;
+        secondTargetSize = 50;
+
+        // Reset colors
+        hourFillColor = [255, 255, 255];
+        hourStrokeColor = [255, 255, 255];
+        minuteFillColor = [255, 255, 255];
+        minuteStrokeColor = [255, 255, 255];
+        secondFillColor = [255, 255, 255];
+        secondStrokeColor = [255, 255, 255];
+        
+        // Handle overlaps
+        if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
+            hourTargetSize = 75;
+            hourFillColor = [255, 255, 255];
+            hourStrokeColor = [255, 0, 0];
+        }
+        if (hourNum && secondNum && hourNum.value === secondNum.value) {
+            hourTargetSize = 50;
+            hourFillColor = [255, 255, 255];
+            hourStrokeColor = [255, 0, 0];
+        }
+        if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
+            minuteTargetSize = 50;
+            minuteFillColor = [255, 255, 255];
+            minuteStrokeColor = [0, 255, 0];
+        }
+        
+        // Smoothly update current sizes
+        currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
+        currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
+        currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
+        
+        // Draw selected numbers with smooth transitions
+        numbers.forEach(num => {
+            let isHour = num.value === currentHour;
+            let isMinute = num.value === currentMinute;
+            let isSecond = num.value === currentSecond;
+            
+            if (isHour || isMinute || isSecond) {
+                textAlign(CENTER, CENTER);
+                
+                // Count how many hands are targeting this number
+                let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
+                
+                if (isHour) {
+                    textSize(currentHourSize);
+                    stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
+                } else if (isMinute) {
+                    textSize(currentMinuteSize);
+                    stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
+                } else if (isSecond) {
+                    textSize(currentSecondSize);
+                    stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
+                }
+                
+                text(num.value, num.x, num.y);
+            }
+        });
+    } else {
+        // Circular mode
         drawSquiggle(hourSquiggle, color(255, 0, 0, 200), currentHour);
+        drawSquiggle(minuteSquiggle, color(0, 255, 0, 200), currentMinute);
+        drawSquiggle(secondSquiggle, color(0, 0, 255, 200), currentSecond);
         
         // Draw all non-selected numbers in black first
         numbers.forEach(num => {
@@ -337,76 +453,77 @@ function draw() {
             }
         });
         
-        // Draw hour number if it's the current hour
+        // Update target sizes and colors for overlapping numbers
+        let hourNum = numbers.find(n => n.value === currentHour);
+        let minuteNum = numbers.find(n => n.value === currentMinute);
+        let secondNum = numbers.find(n => n.value === currentSecond);
+        
+        // Reset target sizes
+        hourTargetSize = 150;
+        minuteTargetSize = 75;
+        secondTargetSize = 50;
+        
+        // Reset colors
+        hourFillColor = [255, 0, 0];
+        hourStrokeColor = [255, 0, 0];
+        minuteFillColor = [0, 255, 0];
+        minuteStrokeColor = [0, 255, 0];
+        secondFillColor = [0, 0, 255];
+        secondStrokeColor = [0, 0, 255];
+        
+        // Handle overlaps
+        if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
+            hourTargetSize = 75;
+            hourFillColor = [0, 255, 0];
+            hourStrokeColor = [255, 0, 0];
+        }
+        if (hourNum && secondNum && hourNum.value === secondNum.value) {
+            hourTargetSize = 50;
+            hourFillColor = [0, 0, 255];
+            hourStrokeColor = [255, 0, 0];
+        }
+        if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
+            minuteTargetSize = 50;
+            minuteFillColor = [0, 0, 255];
+            minuteStrokeColor = [0, 255, 0];
+        }
+        
+        // Smoothly update current sizes
+        currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
+        currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
+        currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
+        
+        // Draw selected numbers with smooth transitions
         numbers.forEach(num => {
-            if (num.value === currentHour) {
+            let isHour = num.value === currentHour;
+            let isMinute = num.value === currentMinute;
+            let isSecond = num.value === currentSecond;
+            
+            if (isHour || isMinute || isSecond) {
                 textAlign(CENTER, CENTER);
-                textSize(150);
-                noStroke();
-                let isInHourCircle = checkNumberInCircle(num, currentHour, 150);
-                if (isInHourCircle) {
-                    fill(255); // White when in circle
-                } else {
-                    fill(255, 0, 0); // Red when not in circle
+                
+                // Count how many hands are targeting this number
+                let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
+                
+                if (isHour) {
+                    textSize(currentHourSize);
+                    stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
+                } else if (isMinute) {
+                    textSize(currentMinuteSize);
+                    stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
+                } else if (isSecond) {
+                    textSize(currentSecondSize);
+                    stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
+                    strokeWeight(handCount >= 2 ? 10 : 2);
+                    fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
                 }
+                
                 text(num.value, num.x, num.y);
             }
-        });
-        
-        // Second layer: Minute
-        drawSquiggle(minuteSquiggle, color(0, 255, 0, 200), currentMinute);
-        
-        // Draw minute number if it's the current minute
-        numbers.forEach(num => {
-            if (num.value === currentMinute) {
-                textAlign(CENTER, CENTER);
-                textSize(75);
-                noStroke();
-                let isInMinuteCircle = checkNumberInCircle(num, currentMinute, 75);
-                if (isInMinuteCircle) {
-                    fill(255); // White when in circle
-                } else {
-                    fill(0, 255, 0); // Green when not in circle
-                }
-                text(num.value, num.x, num.y);
-            }
-        });
-        
-        // Third layer: Second
-        drawSquiggle(secondSquiggle, color(0, 0, 255, 200), currentSecond);
-        
-        // Draw second number if it's the current second
-        numbers.forEach(num => {
-            if (num.value === currentSecond) {
-                textAlign(CENTER, CENTER);
-                textSize(currentSizes[num.value]);
-                noStroke();
-                let isInSecondCircle = checkNumberInCircle(num, currentSecond, 45);
-                fill(isInSecondCircle ? 255 : 0);
-                text(num.value, num.x, num.y);
-            }
-        });
-    } else {
-        // In circular mode, draw all squiggles
-        drawSquiggle(hourSquiggle, color(255, 0, 0, 200), currentHour);
-        drawSquiggle(minuteSquiggle, color(0, 255, 0, 200), currentMinute);
-        drawSquiggle(secondSquiggle, color(0, 0, 255, 200), currentSecond);
-        
-        // Draw all numbers
-        numbers.forEach(num => {
-            textAlign(CENTER, CENTER);
-            noStroke();
-            if (num.value === currentHour) {
-                textSize(150);
-                fill(255, 0, 0);
-            } else if (num.value === currentMinute) {
-                textSize(75);
-                fill(0, 255, 0);
-            } else {
-                textSize(currentSizes[num.value]);
-                fill(0);
-            }
-            text(num.value, num.x, num.y);
         });
     }
 }
