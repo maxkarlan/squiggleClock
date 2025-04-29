@@ -11,6 +11,7 @@ let targetSizes = new Array(60).fill(0);
 let currentSizes = new Array(60).fill(0);
 let clockMode;
 let centerPoint;
+let is24HourMode;
 // Add variables to track current and target positions
 let currentHourTarget = { x: 0, y: 0 };
 let currentMinuteTarget = { x: 0, y: 0 };
@@ -48,6 +49,12 @@ let minuteFillColor = [0, 255, 0];
 let minuteStrokeColor = [0, 255, 0];
 let secondFillColor = [0, 0, 255];
 let secondStrokeColor = [0, 0, 255];
+// Add string mode variables
+let stringModePoints = {
+    hour: [],
+    minute: [],
+    second: []
+};
 
 function drawBackground() {
     background(240); // Base background color
@@ -221,6 +228,10 @@ function setup() {
     
     // Initialize mode and center point
     clockMode = random() < 0.5 ? 'circular' : 'radial';
+    if (random() < 0.25) {
+        clockMode = 'string'; // 25% chance of string mode
+    }
+    is24HourMode = random() < 0.25;
     
     // Randomly select a background pattern
     backgroundPattern = floor(random(4));
@@ -256,7 +267,8 @@ function setup() {
     
     // Initialize number positions with random scattering
     numbers = [];
-    for (let i = 0; i < 60; i++) {
+    let maxNumbers = is24HourMode ? 24 : 12;
+    for (let i = 0; i < maxNumbers; i++) {
         numbers.push({
             value: i,
             x: random(width * 0.1, width * 0.9),
@@ -264,8 +276,24 @@ function setup() {
         });
     }
     
+    // Add minute positions (always 0-59)
+    for (let i = 0; i < 60; i++) {
+        if (i >= maxNumbers) { // Skip if already added as hour
+            numbers.push({
+                value: i,
+                x: random(width * 0.1, width * 0.9),
+                y: random(height * 0.1, height * 0.9)
+            });
+        }
+    }
+    
+    // Initialize string mode points
+    if (clockMode === 'string') {
+        initializeStringMode();
+    }
+    
     // Initialize current positions
-    let currentHour = hour() % 12;
+    let currentHour = is24HourMode ? hour() : hour() % 12;
     let currentMinute = minute();
     let currentSecond = second();
     
@@ -294,7 +322,7 @@ function setup() {
     
     initializeSquiggles();
     
-    console.log("Setup complete. Mode:", clockMode, "Squiggle Length:", squiggleLength);
+    console.log("Setup complete. Mode:", clockMode, "24-hour:", is24HourMode, "Squiggle Length:", squiggleLength);
 }
 
 function initializeSquiggles() {
@@ -315,227 +343,325 @@ function initializeSquiggles() {
     }
 }
 
+function initializeStringMode() {
+    // Sort numbers by value to ensure proper connection order
+    let sortedNumbers = [...numbers].sort((a, b) => a.value - b.value);
+    
+    // Initialize points for each hand
+    stringModePoints.hour = sortedNumbers.filter(n => n.value < (is24HourMode ? 24 : 12));
+    stringModePoints.minute = sortedNumbers.filter(n => n.value < 60);
+    stringModePoints.second = sortedNumbers.filter(n => n.value < 60);
+}
+
+function drawStringPath(points, currentValue, col) {
+    if (points.length === 0) return;
+    
+    noFill();
+    stroke(col);
+    // Set stroke weight based on color (red=hour, green=minute, blue=second)
+    if (red(col) > 0) { // Red = hour
+        strokeWeight(24);
+    } else if (green(col) > 0) { // Green = minute
+        strokeWeight(12);
+    } else { // Blue = second
+        strokeWeight(6);
+    }
+    
+    beginShape();
+    // Draw from 0 to current value
+    for (let i = 0; i <= currentValue; i++) {
+        let point = points[i];
+        if (point) {
+            vertex(point.x, point.y);
+        }
+    }
+    endShape();
+    
+    // Draw circle at current value
+    let currentPoint = points[currentValue];
+    if (currentPoint) {
+        fill(col);
+        noStroke();
+        let circleSize = col === color(255, 0, 0) ? 150 : 
+                        col === color(0, 255, 0) ? 75 : 45;
+        ellipse(currentPoint.x, currentPoint.y, circleSize * 2);
+    }
+}
+
 function draw() {
     drawBackground();
     
     rotationAngle += 0.02;
     
     // Get current time values
-    let currentHour = hour() % 12;
+    let currentHour = is24HourMode ? hour() : hour() % 12;
     let currentMinute = minute();
     let currentSecond = second();
     
-    // Update target sizes based on current second
-    if (currentSecond !== lastSecond) {
-        for (let i = 0; i < 60; i++) {
-            let diff = abs(i - currentSecond);
-            targetSizes[i] = 2 * (25 / (diff + 1));
-        }
-        lastSecond = currentSecond;
-    }
-    
-    // Smoothly update current sizes
-    for (let i = 0; i < 60; i++) {
-        currentSizes[i] = lerp(currentSizes[i], targetSizes[i], 0.1);
-    }
-    
-    // Update squiggles
-    updateSquiggles();
-    
-    // Draw in layers from bottom to top
-    if (clockMode === 'radial') {
-        // First layer: Hour hand with reduced opacity
-        drawSquiggle(hourSquiggle, color(255, 0, 0, 255), currentHour);
+    if (clockMode === 'string') {
+        // Draw hour string (red)
+        drawStringPath(stringModePoints.hour, currentHour, color(255, 0, 0, 150));
         
-        // Second layer: Minute hand with reduced opacity
-        drawSquiggle(minuteSquiggle, color(0, 255, 0, 255), currentMinute);
+        // Draw minute string (green)
+        drawStringPath(stringModePoints.minute, currentMinute, color(0, 255, 0, 150));
         
-        // Third layer: Second hand with reduced opacity
-        drawSquiggle(secondSquiggle, color(0, 0, 255, 255), currentSecond);
-
-        // Draw all non-selected numbers in black first
+        // Draw second string (blue)
+        drawStringPath(stringModePoints.second, currentSecond, color(0, 0, 255, 150));
+        
+        // Draw all numbers
         numbers.forEach(num => {
-            if (num.value !== currentHour && num.value !== currentMinute && num.value !== currentSecond) {
+            let isValidHour = is24HourMode ? num.value < 24 : num.value < 12;
+            let isValidMinute = num.value >= 0 && num.value < 60;
+            
+            if (isValidHour || isValidMinute) {
                 textAlign(CENTER, CENTER);
-                textSize(currentSizes[num.value]);
+                textSize(25);
                 noStroke();
                 fill(0);
-                text(num.value, num.x, num.y);
-            }
-        });
-        
-        // Update target sizes for overlapping numbers in radial mode
-        let hourNum = numbers.find(n => n.value === currentHour);
-        let minuteNum = numbers.find(n => n.value === currentMinute);
-        let secondNum = numbers.find(n => n.value === currentSecond);
-        
-        // Reset target sizes
-        hourTargetSize = 150;
-        minuteTargetSize = 75;
-        secondTargetSize = 50;
-
-        // Reset colors
-        hourFillColor = [255, 255, 255];
-        hourStrokeColor = [255, 255, 255];
-        minuteFillColor = [255, 255, 255];
-        minuteStrokeColor = [255, 255, 255];
-        secondFillColor = [255, 255, 255];
-        secondStrokeColor = [255, 255, 255];
-        
-        // Handle overlaps
-        if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
-            hourTargetSize = 75;
-            hourFillColor = [255, 255, 255];
-            hourStrokeColor = [255, 0, 0];
-        }
-        if (hourNum && secondNum && hourNum.value === secondNum.value) {
-            hourTargetSize = 50;
-            hourFillColor = [255, 255, 255];
-            hourStrokeColor = [255, 0, 0];
-        }
-        if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
-            minuteTargetSize = 50;
-            minuteFillColor = [255, 255, 255];
-            minuteStrokeColor = [0, 255, 0];
-        }
-        
-        // Smoothly update current sizes
-        currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
-        currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
-        currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
-        
-        // Draw selected numbers with smooth transitions
-        numbers.forEach(num => {
-            let isHour = num.value === currentHour;
-            let isMinute = num.value === currentMinute;
-            let isSecond = num.value === currentSecond;
-            
-            if (isHour || isMinute || isSecond) {
-                textAlign(CENTER, CENTER);
-                
-                // Count how many hands are targeting this number
-                let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
-                
-                if (isHour) {
-                    textSize(currentHourSize);
-                    stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
-                } else if (isMinute) {
-                    textSize(currentMinuteSize);
-                    stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
-                } else if (isSecond) {
-                    textSize(currentSecondSize);
-                    stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
-                }
-                
                 text(num.value, num.x, num.y);
             }
         });
     } else {
-        // Circular mode
-        drawSquiggle(hourSquiggle, color(255, 0, 0, 200), currentHour);
-        drawSquiggle(minuteSquiggle, color(0, 255, 0, 200), currentMinute);
-        drawSquiggle(secondSquiggle, color(0, 0, 255, 200), currentSecond);
-        
-        // Draw all non-selected numbers in black first
-        numbers.forEach(num => {
-            if (num.value !== currentHour && num.value !== currentMinute && num.value !== currentSecond) {
-                textAlign(CENTER, CENTER);
-                textSize(currentSizes[num.value]);
-                noStroke();
-                fill(0);
-                text(num.value, num.x, num.y);
+        // Update target sizes based on current second
+        if (currentSecond !== lastSecond) {
+            for (let i = 0; i < 60; i++) {
+                let diff = abs(i - currentSecond);
+                targetSizes[i] = 2 * (25 / (diff + 1));
             }
-        });
-        
-        // Update target sizes and colors for overlapping numbers
-        let hourNum = numbers.find(n => n.value === currentHour);
-        let minuteNum = numbers.find(n => n.value === currentMinute);
-        let secondNum = numbers.find(n => n.value === currentSecond);
-        
-        // Reset target sizes
-        hourTargetSize = 150;
-        minuteTargetSize = 75;
-        secondTargetSize = 50;
-        
-        // Reset colors
-        hourFillColor = [255, 0, 0];
-        hourStrokeColor = [255, 0, 0];
-        minuteFillColor = [0, 255, 0];
-        minuteStrokeColor = [0, 255, 0];
-        secondFillColor = [0, 0, 255];
-        secondStrokeColor = [0, 0, 255];
-        
-        // Handle overlaps
-        if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
-            hourTargetSize = 75;
-            hourFillColor = [0, 255, 0];
-            hourStrokeColor = [255, 0, 0];
-        }
-        if (hourNum && secondNum && hourNum.value === secondNum.value) {
-            hourTargetSize = 50;
-            hourFillColor = [0, 0, 255];
-            hourStrokeColor = [255, 0, 0];
-        }
-        if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
-            minuteTargetSize = 50;
-            minuteFillColor = [0, 0, 255];
-            minuteStrokeColor = [0, 255, 0];
+            lastSecond = currentSecond;
         }
         
         // Smoothly update current sizes
-        currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
-        currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
-        currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
+        for (let i = 0; i < 60; i++) {
+            currentSizes[i] = lerp(currentSizes[i], targetSizes[i], 0.1);
+        }
         
-        // Draw selected numbers with smooth transitions
-        numbers.forEach(num => {
-            let isHour = num.value === currentHour;
-            let isMinute = num.value === currentMinute;
-            let isSecond = num.value === currentSecond;
+        // Update squiggles
+        updateSquiggles();
+        
+        // Draw in layers from bottom to top
+        if (clockMode === 'radial') {
+            // First layer: Hour hand with reduced opacity
+            drawSquiggle(hourSquiggle, color(255, 0, 0, 255), currentHour);
             
-            if (isHour || isMinute || isSecond) {
-                textAlign(CENTER, CENTER);
+            // Second layer: Minute hand with reduced opacity
+            drawSquiggle(minuteSquiggle, color(0, 255, 0, 255), currentMinute);
+            
+            // Third layer: Second hand with reduced opacity
+            drawSquiggle(secondSquiggle, color(0, 0, 255, 255), currentSecond);
+
+            // Draw all non-selected numbers in black first
+            numbers.forEach(num => {
+                // Only draw numbers that are valid for the current mode
+                let isValidHour = is24HourMode ? num.value < 24 : num.value < 12;
+                let isValidMinute = num.value >= 0 && num.value < 60;
                 
-                // Count how many hands are targeting this number
-                let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
-                
-                if (isHour) {
-                    textSize(currentHourSize);
-                    stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
-                } else if (isMinute) {
-                    textSize(currentMinuteSize);
-                    stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
-                } else if (isSecond) {
-                    textSize(currentSecondSize);
-                    stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
-                    strokeWeight(handCount >= 2 ? 10 : 2);
-                    fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
+                if ((isValidHour || isValidMinute) && 
+                    num.value !== currentHour && 
+                    num.value !== currentMinute && 
+                    num.value !== currentSecond) {
+                    textAlign(CENTER, CENTER);
+                    textSize(currentSizes[num.value]);
+                    noStroke();
+                    fill(0);
+                    text(num.value, num.x, num.y);
                 }
-                
-                text(num.value, num.x, num.y);
+            });
+            
+            // Update target sizes for overlapping numbers in radial mode
+            let hourNum = numbers.find(n => n.value === currentHour);
+            let minuteNum = numbers.find(n => n.value === currentMinute);
+            let secondNum = numbers.find(n => n.value === currentSecond);
+            
+            // Reset target sizes
+            hourTargetSize = 150;
+            minuteTargetSize = 75;
+            secondTargetSize = 50;
+
+            // Reset colors
+            hourFillColor = [255, 255, 255];
+            hourStrokeColor = [255, 255, 255];
+            minuteFillColor = [255, 255, 255];
+            minuteStrokeColor = [255, 255, 255];
+            secondFillColor = [255, 255, 255];
+            secondStrokeColor = [255, 255, 255];
+            
+            // Handle overlaps
+            if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
+                hourTargetSize = 75;
+                hourFillColor = [255, 255, 255];
+                hourStrokeColor = [255, 0, 0];
             }
-        });
+            if (hourNum && secondNum && hourNum.value === secondNum.value) {
+                hourTargetSize = 50;
+                hourFillColor = [255, 255, 255];
+                hourStrokeColor = [255, 0, 0];
+            }
+            if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
+                minuteTargetSize = 50;
+                minuteFillColor = [255, 255, 255];
+                minuteStrokeColor = [0, 255, 0];
+            }
+            
+            // Smoothly update current sizes
+            currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
+            currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
+            currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
+            
+            // Draw selected numbers with smooth transitions
+            numbers.forEach(num => {
+                let isHour = num.value === currentHour;
+                let isMinute = num.value === currentMinute;
+                let isSecond = num.value === currentSecond;
+                
+                // Only draw if it's a valid number for the current mode
+                let isValidHour = is24HourMode ? num.value < 24 : num.value < 12;
+                let isValidMinute = num.value >= 0 && num.value < 60;
+                
+                if ((isValidHour || isValidMinute) && (isHour || isMinute || isSecond)) {
+                    textAlign(CENTER, CENTER);
+                    
+                    // Count how many hands are targeting this number
+                    let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
+                    
+                    if (isHour) {
+                        textSize(currentHourSize);
+                        stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
+                    } else if (isMinute) {
+                        textSize(currentMinuteSize);
+                        stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
+                    } else if (isSecond) {
+                        textSize(currentSecondSize);
+                        stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
+                    }
+                    
+                    text(num.value, num.x, num.y);
+                }
+            });
+        } else {
+            // Circular mode
+            drawSquiggle(hourSquiggle, color(255, 0, 0, 200), currentHour);
+            drawSquiggle(minuteSquiggle, color(0, 255, 0, 200), currentMinute);
+            drawSquiggle(secondSquiggle, color(0, 0, 255, 200), currentSecond);
+            
+            // Draw all non-selected numbers in black first
+            numbers.forEach(num => {
+                let isValidHour = is24HourMode ? num.value < 24 : num.value < 12;
+                let isValidMinute = num.value >= 0 && num.value < 60;
+                
+                if ((isValidHour || isValidMinute) && 
+                    num.value !== currentHour && 
+                    num.value !== currentMinute && 
+                    num.value !== currentSecond) {
+                    textAlign(CENTER, CENTER);
+                    textSize(currentSizes[num.value]);
+                    noStroke();
+                    fill(0);
+                    text(num.value, num.x, num.y);
+                }
+            });
+            
+            // Update target sizes and colors for overlapping numbers
+            let hourNum = numbers.find(n => n.value === currentHour);
+            let minuteNum = numbers.find(n => n.value === currentMinute);
+            let secondNum = numbers.find(n => n.value === currentSecond);
+            
+            // Reset target sizes
+            hourTargetSize = 150;
+            minuteTargetSize = 75;
+            secondTargetSize = 50;
+            
+            // Reset colors
+            hourFillColor = [255, 0, 0];
+            hourStrokeColor = [255, 0, 0];
+            minuteFillColor = [0, 255, 0];
+            minuteStrokeColor = [0, 255, 0];
+            secondFillColor = [0, 0, 255];
+            secondStrokeColor = [0, 0, 255];
+            
+            // Handle overlaps
+            if (hourNum && minuteNum && hourNum.value === minuteNum.value) {
+                hourTargetSize = 75;
+                hourFillColor = [0, 255, 0];
+                hourStrokeColor = [255, 0, 0];
+            }
+            if (hourNum && secondNum && hourNum.value === secondNum.value) {
+                hourTargetSize = 50;
+                hourFillColor = [0, 0, 255];
+                hourStrokeColor = [255, 0, 0];
+            }
+            if (minuteNum && secondNum && minuteNum.value === secondNum.value) {
+                minuteTargetSize = 50;
+                minuteFillColor = [0, 0, 255];
+                minuteStrokeColor = [0, 255, 0];
+            }
+            
+            // Smoothly update current sizes
+            currentHourSize = lerp(currentHourSize, hourTargetSize, 0.1);
+            currentMinuteSize = lerp(currentMinuteSize, minuteTargetSize, 0.1);
+            currentSecondSize = lerp(currentSecondSize, secondTargetSize, 0.1);
+            
+            // Draw selected numbers with smooth transitions
+            numbers.forEach(num => {
+                let isHour = num.value === currentHour;
+                let isMinute = num.value === currentMinute;
+                let isSecond = num.value === currentSecond;
+                
+                // Only draw if it's a valid number for the current mode
+                let isValidHour = is24HourMode ? num.value < 24 : num.value < 12;
+                let isValidMinute = num.value >= 0 && num.value < 60;
+                
+                if ((isValidHour || isValidMinute) && (isHour || isMinute || isSecond)) {
+                    textAlign(CENTER, CENTER);
+                    
+                    // Count how many hands are targeting this number
+                    let handCount = (isHour ? 1 : 0) + (isMinute ? 1 : 0) + (isSecond ? 1 : 0);
+                    
+                    if (isHour) {
+                        textSize(currentHourSize);
+                        stroke(hourStrokeColor[0], hourStrokeColor[1], hourStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(hourFillColor[0], hourFillColor[1], hourFillColor[2]);
+                    } else if (isMinute) {
+                        textSize(currentMinuteSize);
+                        stroke(minuteStrokeColor[0], minuteStrokeColor[1], minuteStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(minuteFillColor[0], minuteFillColor[1], minuteFillColor[2]);
+                    } else if (isSecond) {
+                        textSize(currentSecondSize);
+                        stroke(secondStrokeColor[0], secondStrokeColor[1], secondStrokeColor[2]);
+                        strokeWeight(handCount >= 2 ? 10 : 2);
+                        fill(secondFillColor[0], secondFillColor[1], secondFillColor[2]);
+                    }
+                    
+                    text(num.value, num.x, num.y);
+                }
+            });
+        }
     }
 }
 
 function updateSquiggles() {
-    let h = hour() % 12;
+    // Get the current hour based on the clock mode
+    let h = is24HourMode ? hour() : hour() % 12;
     let m = minute();
     let s = second();
     
     let hourTarget = numbers.find(n => n.value === h);
     let minuteTarget = numbers.find(n => n.value === m);
     let secondTarget = numbers.find(n => n.value === s);
+    
+    // Debug logging for hour targeting
+    if (!hourTarget) {
+        console.log("Warning: No target found for hour:", h, "24-hour mode:", is24HourMode);
+        console.log("Available hour numbers:", numbers.filter(n => n.value < (is24HourMode ? 24 : 12)).map(n => n.value));
+    }
     
     updateSquiggle(hourSquiggle, hourTarget, 0.05, 1);
     updateSquiggle(minuteSquiggle, minuteTarget, 0.08, 2);
@@ -700,14 +826,25 @@ function windowResized() {
     }
     
     // Reinitialize positions
-    numbers = numbers.map(num => ({
-        ...num,
-        x: random(width * 0.1, width * 0.9),
-        y: random(height * 0.1, height * 0.9)
-    }));
+    let maxNumbers = is24HourMode ? 24 : 12;
+    numbers = numbers.map(num => {
+        if (num.value < maxNumbers || num.value >= maxNumbers) {
+            return {
+                ...num,
+                x: random(width * 0.1, width * 0.9),
+                y: random(height * 0.1, height * 0.9)
+            };
+        }
+        return num;
+    });
+    
+    // Reinitialize string mode points if in string mode
+    if (clockMode === 'string') {
+        initializeStringMode();
+    }
     
     // Reset current positions
-    let currentHour = hour() % 12;
+    let currentHour = is24HourMode ? hour() : hour() % 12;
     let currentMinute = minute();
     let currentSecond = second();
     
